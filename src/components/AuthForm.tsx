@@ -9,27 +9,18 @@ import {
 import type { UserCredential } from 'firebase/auth';
 import { auth, firestore } from '../firebase';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs, setDoc, doc } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  setDoc,
+  doc,
+  query,
+  where,
+} from 'firebase/firestore';
 
-const AuthForm: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const navigate = useNavigate();
+// ... (imports)
 
-  const handleSignUp = async (emailParam: string, passwordParam: string) => {
-    const userCredential: UserCredential = await createUserWithEmailAndPassword(auth, emailParam, passwordParam);
-    const user = userCredential.user;
-
-    const adminsCollection = collection(firestore, 'admins');
-    const adminSnapshot = await getDocs(adminsCollection);
-    if (adminSnapshot.empty) {
-      await setDoc(doc(firestore, 'admins', user.uid), { isAdmin: true });
-      console.log('First user signed up. Promoting to admin.');
-    }
-  };
+// ... (component)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,9 +29,23 @@ const AuthForm: React.FC = () => {
 
     try {
       if (isSignUp) {
-        await handleSignUp(email, password);
+        await handleSignUp(email, password, username);
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        // Login logic
+        let userEmail = email;
+        // If the email field doesn't contain an @, assume it's a username
+        if (!email.includes('@')) {
+          const usersRef = collection(firestore, 'users');
+          const q = query(usersRef, where('username', '==', email));
+          const querySnapshot = await getDocs(q);
+          if (querySnapshot.empty) {
+            setError('User not found.');
+            return;
+          }
+          const userData = querySnapshot.docs[0].data();
+          userEmail = userData.email;
+        }
+        await signInWithEmailAndPassword(auth, userEmail, password);
       }
       navigate('/');
     } catch (err: any) {
@@ -88,6 +93,15 @@ const AuthForm: React.FC = () => {
           placeholder="Email"
           required
         />
+        {isSignUp && (
+            <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Username"
+            required
+            />
+        )}
         {isSignUp && (
             <input
             type="password"

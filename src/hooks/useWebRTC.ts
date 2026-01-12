@@ -9,13 +9,18 @@ const servers = {
     {
       urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
     },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
 };
 
 export function useWebRTC(voiceChannel: Channel | null, micId: string | null) {
   const { user } = useAuth();
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
+  const [remoteStreams, setRemoteStreams] = useState<Map<string, {stream: MediaStream, user: any}>>(new Map());
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const [isMuted, setIsMuted] = useState(false);
 
@@ -81,7 +86,7 @@ export function useWebRTC(voiceChannel: Channel | null, micId: string | null) {
       peerConnections.current.set(remoteUser.uid, pc);
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
       
-      pc.ontrack = (event) => setRemoteStreams(prev => new Map(prev).set(remoteUser.uid, event.streams[0]));
+      pc.ontrack = (event) => setRemoteStreams(prev => new Map(prev).set(remoteUser.uid, {stream: event.streams[0], user: remoteUser}));
       
       const candidatesRef = ref(database, `rooms/${voiceChannel.id}/candidates/${user.uid}/${remoteUser.uid}`);
       pc.onicecandidate = e => e.candidate && push(candidatesRef, e.candidate.toJSON());
@@ -103,7 +108,13 @@ export function useWebRTC(voiceChannel: Channel | null, micId: string | null) {
         const pc = new RTCPeerConnection(servers);
         peerConnections.current.set(remoteUserId, pc);
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-        pc.ontrack = (event) => setRemoteStreams(prev => new Map(prev).set(remoteUserId, event.streams[0]));
+        
+        // We don't have the full remoteUser object here, so we'll have to get it.
+        const remoteUserRef = ref(database, `rooms/${voiceChannel.id}/users/${remoteUserId}`);
+        const remoteUserSnapshot = await get(remoteUserRef);
+        const remoteUser = remoteUserSnapshot.val();
+
+        pc.ontrack = (event) => setRemoteStreams(prev => new Map(prev).set(remoteUserId, {stream: event.streams[0], user: remoteUser}));
         
         const candidatesRef = ref(database, `rooms/${voiceChannel.id}/candidates/${user.uid}/${remoteUserId}`);
         pc.onicecandidate = e => e.candidate && push(candidatesRef, e.candidate.toJSON());
