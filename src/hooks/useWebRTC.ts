@@ -19,6 +19,11 @@ export function useWebRTC(voiceChannel: Channel | null) {
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const roomRef = useRef(voiceChannel ? ref(database, `rooms/${voiceChannel.id}`) : null);
 
+  const voiceChannelRef = useRef(voiceChannel);
+  useEffect(() => {
+    voiceChannelRef.current = voiceChannel;
+  }, [voiceChannel]);
+
   const cleanup = useCallback(() => {
     if (localStream) {
         localStream.getTracks().forEach((track) => track.stop());
@@ -27,10 +32,12 @@ export function useWebRTC(voiceChannel: Channel | null) {
     peerConnections.current.clear();
     setRemoteStreams(new Map());
     setLocalStream(null);
-    if(roomRef.current && user) {
-        remove(ref(database, `rooms/${voiceChannel!.id}/users/${user.uid}`));
+
+    const lastChannel = voiceChannelRef.current;
+    if(roomRef.current && user && lastChannel) {
+        remove(ref(database, `rooms/${lastChannel.id}/users/${user.uid}`));
     }
-  }, [localStream, user, voiceChannel]);
+  }, [user, localStream]);
 
 
   // 1. Get User Media

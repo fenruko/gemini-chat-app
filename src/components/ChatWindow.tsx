@@ -71,8 +71,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ activeChannel }) => {
       </div>
       <div className="chat-messages">
         {messages.map((msg) => (
-          <div key={msg.id} className="message">
-            <span className="message-author">{msg.author.name}</span>
+          <div key={msg.id} className="message" title={new Date(msg.timestamp).toLocaleString()}>
+            <span className="message-author">{msg.author.name}: </span>
             <span className="message-text">{msg.text}</span>
           </div>
         ))}
