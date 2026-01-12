@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ChannelList from '../components/ChannelList';
 import ChatWindow from '../components/ChatWindow';
 import UserList from '../components/UserList';
@@ -12,39 +12,33 @@ export interface Channel {
   type: 'text' | 'voice';
 }
 
-// Placeholder for the voice UI
+const AudioStream: React.FC<{ stream: MediaStream, isMuted: boolean }> = ({ stream, isMuted }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.srcObject = stream;
+      audioRef.current.muted = isMuted;
+    }
+  }, [stream, isMuted]);
+  return <audio ref={audioRef} autoPlay playsInline />;
+};
+
 const VoiceChannelUI: React.FC<{
   channel: Channel;
-  localStream: MediaStream | null;
-  remoteStreams: MediaStream[];
+  isMuted: boolean;
+  toggleMute: () => void;
+  isDeafened: boolean;
+  toggleDeafen: () => void;
   leaveVoiceChannel: () => void;
-}> = ({ channel, localStream, remoteStreams, leaveVoiceChannel }) => {
-  const localAudioRef = React.useRef<HTMLAudioElement>(null);
-  const remoteAudioRefs = React.useRef<{ [key: number]: HTMLAudioElement | null }>({});
-
-  React.useEffect(() => {
-    if (localAudioRef.current && localStream) {
-      localAudioRef.current.srcObject = localStream;
-    }
-  }, [localStream]);
-
-  React.useEffect(() => {
-    remoteStreams.forEach((stream, index) => {
-      if (remoteAudioRefs.current[index] && stream) {
-        remoteAudioRefs.current[index]!.srcObject = stream;
-      }
-    });
-  }, [remoteStreams]);
-
+}> = ({ channel, isMuted, toggleMute, isDeafened, toggleDeafen, leaveVoiceChannel }) => {
   return (
     <div className="voice-ui">
-      <h3>In Voice Channel: {channel.name}</h3>
-      <button onClick={leaveVoiceChannel}>Leave Voice</button>
-      <div className="voice-streams">
-        {localStream && <audio autoPlay muted playsInline ref={localAudioRef} />}
-        {remoteStreams.map((_, index) => (
-          <audio key={index} autoPlay playsInline ref={el => { remoteAudioRefs.current[index] = el; }} />
-        ))}
+      <h3>Voice Connected</h3>
+      <p>{channel.name}</p>
+      <div className="voice-controls">
+        <button onClick={toggleMute}>{isMuted ? '🎤 Unmute' : '🎤 Mute'}</button>
+        <button onClick={toggleDeafen}>{isDeafened ? '🎧 Un-deafen' : '🎧 Deafen'}</button>
+        <button onClick={leaveVoiceChannel} className="leave-btn">Leave</button>
       </div>
     </div>
   );
@@ -54,12 +48,17 @@ const VoiceChannelUI: React.FC<{
 const HomePage: React.FC = () => {
   const [activeTextChannel, setActiveTextChannel] = useState<Channel | null>(null);
   const [activeVoiceChannel, setActiveVoiceChannel] = useState<Channel | null>(null);
+  const [isDeafened, setIsDeafened] = useState(false);
 
-  const { localStream, remoteStreams } = useWebRTC(activeVoiceChannel);
+  const { localStream, remoteStreams, isMuted, toggleMute } = useWebRTC(activeVoiceChannel);
 
   const leaveVoice = () => {
     setActiveVoiceChannel(null);
   };
+  
+  const toggleDeafen = useCallback(() => {
+    setIsDeafened(d => !d);
+  }, []);
 
   return (
     <div className="home-page">
@@ -75,17 +74,27 @@ const HomePage: React.FC = () => {
             <h2>Select a text channel</h2>
           </div>
         )}
-        {activeVoiceChannel && (
-          <VoiceChannelUI 
-            channel={activeVoiceChannel}
-            localStream={localStream}
-            remoteStreams={remoteStreams}
-            leaveVoiceChannel={leaveVoice}
-          />
-        )}
-        <LogoutButton />
+        <div className="bottom-area">
+          {activeVoiceChannel && (
+            <VoiceChannelUI 
+              channel={activeVoiceChannel}
+              isMuted={isMuted}
+              toggleMute={toggleMute}
+              isDeafened={isDeafened}
+              toggleDeafen={toggleDeafen}
+              leaveVoiceChannel={leaveVoice}
+            />
+          )}
+          <LogoutButton />
+        </div>
       </div>
       <UserList />
+      <div className="remote-audio-container">
+        {localStream && <AudioStream stream={localStream} isMuted={true} />}
+        {remoteStreams.map((stream) => (
+          <AudioStream key={stream.id} stream={stream} isMuted={isDeafened} />
+        ))}
+      </div>
     </div>
   );
 };

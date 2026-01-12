@@ -17,28 +17,16 @@ export function useWebRTC(voiceChannel: Channel | null) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const roomRef = useRef(voiceChannel ? ref(database, `rooms/${voiceChannel.id}`) : null);
+  const [isMuted, setIsMuted] = useState(false);
 
-  const voiceChannelRef = useRef(voiceChannel);
-  useEffect(() => {
-    voiceChannelRef.current = voiceChannel;
-  }, [voiceChannel]);
-
-  const cleanup = useCallback(() => {
+  const toggleMute = useCallback(() => {
     if (localStream) {
-        localStream.getTracks().forEach((track) => track.stop());
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = !track.enabled;
+      });
+      setIsMuted(prev => !prev);
     }
-    peerConnections.current.forEach(pc => pc.close());
-    peerConnections.current.clear();
-    setRemoteStreams(new Map());
-    setLocalStream(null);
-
-    const lastChannel = voiceChannelRef.current;
-    if(roomRef.current && user && lastChannel) {
-        remove(ref(database, `rooms/${lastChannel.id}/users/${user.uid}`));
-    }
-  }, [user, localStream]);
-
+  }, [localStream]);
 
   // 1. Get User Media
   useEffect(() => {
@@ -48,111 +36,97 @@ export function useWebRTC(voiceChannel: Channel | null) {
           setLocalStream(stream);
         })
         .catch(error => console.error('Error accessing media devices.', error));
-    } else {
-        cleanup();
     }
-    return cleanup;
-  }, [voiceChannel, user, cleanup]);
+
+    // Cleanup function
+    return () => {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        setLocalStream(null);
+      }
+      peerConnections.current.forEach(pc => pc.close());
+      peerConnections.current.clear();
+      setRemoteStreams(new Map());
+      if(voiceChannel && user) {
+        const currentUserRef = ref(database, `rooms/${voiceChannel.id}/users/${user.uid}`);
+        remove(currentUserRef);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceChannel, user]);
 
 
   // 2. Signaling Logic
   useEffect(() => {
     if (!localStream || !voiceChannel || !user) return;
 
-    roomRef.current = ref(database, `rooms/${voiceChannel.id}`);
     const usersRef = ref(database, `rooms/${voiceChannel.id}/users`);
     const currentUserRef = ref(database, `rooms/${voiceChannel.id}/users/${user.uid}`);
     set(currentUserRef, { uid: user.uid, email: user.email });
 
-    // Listen for new users
+    const listeners: Array<() => void> = [];
+
     const onNewUser = onChildAdded(usersRef, async (snapshot) => {
       const remoteUser = snapshot.val();
-      if (remoteUser.uid === user.uid) return;
-
-      console.log(`New user joined: ${remoteUser.uid}`);
+      if (remoteUser.uid === user.uid || peerConnections.current.has(remoteUser.uid)) return;
+      
       const pc = new RTCPeerConnection(servers);
       peerConnections.current.set(remoteUser.uid, pc);
-
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-      pc.ontrack = (event) => {
-        setRemoteStreams(prev => new Map(prev).set(remoteUser.uid, event.streams[0]));
-      };
-
-      // ICE Candidates
+      
+      pc.ontrack = (event) => setRemoteStreams(prev => new Map(prev).set(remoteUser.uid, event.streams[0]));
+      
       const candidatesRef = ref(database, `rooms/${voiceChannel.id}/candidates/${user.uid}/${remoteUser.uid}`);
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          push(candidatesRef, event.candidate.toJSON());
-        }
-      };
+      pc.onicecandidate = e => e.candidate && push(candidatesRef, e.candidate.toJSON());
+      
       const remoteCandidatesRef = ref(database, `rooms/${voiceChannel.id}/candidates/${remoteUser.uid}/${user.uid}`);
-      onChildAdded(remoteCandidatesRef, (candidateSnapshot) => {
-        const candidate = new RTCIceCandidate(candidateSnapshot.val());
-        pc.addIceCandidate(candidate);
-      });
+      const iceListener = onChildAdded(remoteCandidatesRef, s => pc.addIceCandidate(new RTCIceCandidate(s.val())));
+      listeners.push(() => off(remoteCandidatesRef, 'child_added', iceListener));
 
-      // Create Offer
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      const offerRef = ref(database, `rooms/${voiceChannel.id}/offers/${remoteUser.uid}/${user.uid}`);
-      set(offerRef, { sdp: offer.sdp, type: offer.type });
+      await set(ref(database, `rooms/${voiceChannel.id}/offers/${remoteUser.uid}/${user.uid}`), { sdp: offer.sdp, type: offer.type });
     });
 
-    // Listen for offers
     const offersRef = ref(database, `rooms/${voiceChannel.id}/offers/${user.uid}`);
-    onChildAdded(offersRef, async (snapshot) => {
+    const offerListener = onChildAdded(offersRef, async (snapshot) => {
         const remoteUserId = snapshot.key;
-        if(!remoteUserId) return;
-
-        console.log(`Received offer from: ${remoteUserId}`);
+        if (!remoteUserId || peerConnections.current.has(remoteUserId)) return;
+        
         const pc = new RTCPeerConnection(servers);
         peerConnections.current.set(remoteUserId, pc);
-
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-        pc.ontrack = (event) => {
-            setRemoteStreams(prev => new Map(prev).set(remoteUserId, event.streams[0]));
-        };
-
+        pc.ontrack = (event) => setRemoteStreams(prev => new Map(prev).set(remoteUserId, event.streams[0]));
+        
         const candidatesRef = ref(database, `rooms/${voiceChannel.id}/candidates/${user.uid}/${remoteUserId}`);
-        pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                push(candidatesRef, event.candidate.toJSON());
-            }
-        };
+        pc.onicecandidate = e => e.candidate && push(candidatesRef, e.candidate.toJSON());
+        
         const remoteCandidatesRef = ref(database, `rooms/${voiceChannel.id}/candidates/${remoteUserId}/${user.uid}`);
-        onChildAdded(remoteCandidatesRef, (candidateSnapshot) => {
-            const candidate = new RTCIceCandidate(candidateSnapshot.val());
-            pc.addIceCandidate(candidate);
-        });
-
+        const iceListener = onChildAdded(remoteCandidatesRef, s => pc.addIceCandidate(new RTCIceCandidate(s.val())));
+        listeners.push(() => off(remoteCandidatesRef, 'child_added', iceListener));
+        
         await pc.setRemoteDescription(snapshot.val());
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-
-        const answerRef = ref(database, `rooms/${voiceChannel.id}/answers/${remoteUserId}/${user.uid}`);
-        set(answerRef, { sdp: answer.sdp, type: answer.type });
+        await set(ref(database, `rooms/${voiceChannel.id}/answers/${remoteUserId}/${user.uid}`), { sdp: answer.sdp, type: answer.type });
+        
+        remove(snapshot.ref);
     });
     
-    // Listen for answers
     const answersRef = ref(database, `rooms/${voiceChannel.id}/answers/${user.uid}`);
-    onChildAdded(answersRef, async (snapshot) => {
+    const answerListener = onChildAdded(answersRef, async (snapshot) => {
         const remoteUserId = snapshot.key;
-        if(!remoteUserId) return;
-
-        console.log(`Received answer from: ${remoteUserId}`);
+        if (!remoteUserId) return;
         const pc = peerConnections.current.get(remoteUserId);
         if (pc && pc.signalingState !== 'stable') {
             await pc.setRemoteDescription(snapshot.val());
         }
+        remove(snapshot.ref);
     });
 
-    // Listen for users leaving
     const onUserLeft = onChildRemoved(usersRef, (snapshot) => {
         const remoteUserId = snapshot.key;
         if(!remoteUserId) return;
-
-        console.log(`User left: ${remoteUserId}`);
         peerConnections.current.get(remoteUserId)?.close();
         peerConnections.current.delete(remoteUserId);
         setRemoteStreams(prev => {
@@ -162,18 +136,16 @@ export function useWebRTC(voiceChannel: Channel | null) {
         });
     });
 
-
     return () => {
-        // Detach all listeners
         off(usersRef, 'child_added', onNewUser);
         off(usersRef, 'child_removed', onUserLeft);
-        off(offersRef, 'child_added');
-        off(answersRef, 'child_added');
-        // And remove self from room
+        off(offersRef, 'child_added', offerListener);
+        off(answersRef, 'child_added', answerListener);
+        listeners.forEach(cleanupFunc => cleanupFunc());
         remove(currentUserRef);
     };
+    
+  }, [localStream, user, voiceChannel]);
 
-  }, [localStream, voiceChannel, user]);
-
-  return { localStream, remoteStreams: Array.from(remoteStreams.values()) };
+  return { localStream, remoteStreams: Array.from(remoteStreams.values()), isMuted, toggleMute };
 }
