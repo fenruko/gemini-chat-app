@@ -19,14 +19,31 @@ const VoiceChannelUI: React.FC<{
   remoteStreams: MediaStream[];
   leaveVoiceChannel: () => void;
 }> = ({ channel, localStream, remoteStreams, leaveVoiceChannel }) => {
+  const localAudioRef = React.useRef<HTMLAudioElement>(null);
+  const remoteAudioRefs = React.useRef<{ [key: number]: HTMLAudioElement | null }>({});
+
+  React.useEffect(() => {
+    if (localAudioRef.current && localStream) {
+      localAudioRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  React.useEffect(() => {
+    remoteStreams.forEach((stream, index) => {
+      if (remoteAudioRefs.current[index] && stream) {
+        remoteAudioRefs.current[index]!.srcObject = stream;
+      }
+    });
+  }, [remoteStreams]);
+
   return (
     <div className="voice-ui">
       <h3>In Voice Channel: {channel.name}</h3>
       <button onClick={leaveVoiceChannel}>Leave Voice</button>
       <div className="voice-streams">
-        {localStream && <audio autoPlay muted playsInline srcObject={localStream} />}
-        {remoteStreams.map((stream, index) => (
-          <audio key={index} autoPlay playsInline srcObject={stream} />
+        {localStream && <audio autoPlay muted playsInline ref={localAudioRef} />}
+        {remoteStreams.map((_, index) => (
+          <audio key={index} autoPlay playsInline ref={el => { remoteAudioRefs.current[index] = el; }} />
         ))}
       </div>
     </div>

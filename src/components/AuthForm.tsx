@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  UserCredential,
 } from 'firebase/auth';
+import type { UserCredential } from 'firebase/auth';
 import { auth, firestore } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, setDoc, doc } from 'firebase/firestore';

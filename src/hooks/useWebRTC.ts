@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ref, onValue, off, set, onChildAdded, onChildRemoved, remove } from 'firebase/database';
+import { ref, off, set, onChildAdded, onChildRemoved, remove, push } from 'firebase/database';
 import { database } from '../firebase';
 import { useAuth } from './useAuth';
-import { Channel } from '../pages/HomePage';
+import type { Channel } from '../pages/HomePage';
 
 const servers = {
   iceServers: [

@@ -7,7 +7,7 @@ import { useAuth } from './hooks/useAuth';
 import { usePresence } from './hooks/usePresence';
 
 const App: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
   usePresence(); // Hook to manage user's online status
 
   if (loading) {

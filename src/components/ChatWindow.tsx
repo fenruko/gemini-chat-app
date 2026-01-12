@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ref, onValue, push, serverTimestamp } from 'firebase/database';
 import { database } from '../firebase';
 import { useAuth } from '../hooks/useAuth';
-import { Channel } from '../pages/HomePage';
+import type { Channel } from '../pages/HomePage';
 
 interface ChatWindowProps {
   activeChannel: Channel;
