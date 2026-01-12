@@ -4,7 +4,6 @@ import ChatWindow from '../components/ChatWindow';
 import UserList from '../components/UserList';
 import LogoutButton from '../components/LogoutButton';
 import { useWebRTC } from '../hooks/useWebRTC';
-import { useDevices } from '../hooks/useDevices';
 import DeviceSettings from '../components/DeviceSettings';
 import './HomePage.css';
 
