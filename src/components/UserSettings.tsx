@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
-import { auth, firestore } from '../firebase';
+import { firestore } from '../firebase';
 import { useAuth } from '../hooks/useAuth';
 
 const UserSettings: React.FC = () => {
@@ -8,7 +8,6 @@ const UserSettings: React.FC = () => {
   const [newUsername, setNewUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [lastChanged, setLastChanged] = useState<Timestamp | null>(null);
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -20,7 +19,6 @@ const UserSettings: React.FC = () => {
           const userData = userDoc.data();
           setNewUsername(userData.username);
           if (userData.usernameLastChanged) {
-            setLastChanged(userData.usernameLastChanged);
             const now = Timestamp.now();
             const diff = now.seconds - userData.usernameLastChanged.seconds;
             const cooldownSeconds = 24 * 60 * 60;

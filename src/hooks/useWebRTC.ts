@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ref, off, set, onChildAdded, onChildRemoved, remove, push } from 'firebase/database';
+import { ref, off, set, onChildAdded, onChildRemoved, remove, push, get } from 'firebase/database';
 import { database } from '../firebase';
 import { useAuth } from './useAuth';
 import type { Channel } from '../pages/HomePage';

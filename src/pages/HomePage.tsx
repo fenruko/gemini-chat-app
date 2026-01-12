@@ -10,7 +10,13 @@ import './HomePage.css';
 
 // ... (interface Channel)
 
-const AudioStream: React.FC<{ stream: MediaStream, isMuted: boolean, speakerId: string | null, user: any }> = ({ stream, isMuted, speakerId, user }) => {
+export interface Channel {
+  id: string;
+  name: string;
+  type: 'text' | 'voice';
+}
+
+const AudioStream: React.FC<{ stream: MediaStream, isMuted: boolean, speakerId: string | null }> = ({ stream, isMuted, speakerId }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     const audio = audioRef.current;
@@ -28,7 +34,31 @@ const AudioStream: React.FC<{ stream: MediaStream, isMuted: boolean, speakerId: 
   return <audio ref={audioRef} autoPlay playsInline />;
 };
 
-// ... (VoiceChannelUI component)
+const VoiceChannelUI: React.FC<{
+  channel: Channel;
+  isMuted: boolean;
+  toggleMute: () => void;
+  isDeafened: boolean;
+  toggleDeafen: () => void;
+  leaveVoiceChannel: () => void;
+  onMicChange: (id: string) => void;
+  onSpeakerChange: (id: string) => void;
+}> = ({ channel, isMuted, toggleMute, isDeafened, toggleDeafen, leaveVoiceChannel, onMicChange, onSpeakerChange }) => {
+  return (
+    <div className="voice-ui">
+      <div className='voice-info'>
+        <h3>Voice Connected</h3>
+        <p>{channel.name}</p>
+      </div>
+      <DeviceSettings onMicChange={onMicChange} onSpeakerChange={onSpeakerChange} />
+      <div className="voice-controls">
+        <button onClick={toggleMute} title={isMuted ? 'Unmute' : 'Mute'}>{isMuted ? '🎤' : '🤫'}</button>
+        <button onClick={toggleDeafen} title={isDeafened ? 'Undeafen' : 'Deafen'}>{isDeafened ? '🎧' : '🔇'}</button>
+        <button onClick={leaveVoiceChannel} className="leave-btn" title="Leave Channel">❌</button>
+      </div>
+    </div>
+  );
+};
 
 const HomePage: React.FC = () => {
   const [activeTextChannel, setActiveTextChannel] = useState<Channel | null>(null);
@@ -37,7 +67,6 @@ const HomePage: React.FC = () => {
   const [micId, setMicId] = useState<string | null>(null);
   const [speakerId, setSpeakerId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [speaking, setSpeaking] = useState<string | null>(null);
 
   const { localStream, remoteStreams, isMuted, toggleMute } = useWebRTC(activeVoiceChannel, micId);
 
@@ -73,9 +102,9 @@ const HomePage: React.FC = () => {
       </div>
       <UserList />
       <div className="remote-audio-container">
-        {localStream && <AudioStream stream={localStream} isMuted={true} speakerId={speakerId} user={{email: 'local'}}/>}
+        {localStream && <AudioStream stream={localStream} isMuted={true} speakerId={speakerId} />}
         {remoteStreams.map(({ stream, user }) => (
-          <AudioStream key={user.uid} stream={stream} isMuted={isDeafened} speakerId={speakerId} user={user} />
+          <AudioStream key={user.uid} stream={stream} isMuted={isDeafened} speakerId={speakerId} />
         ))}
       </div>
       {activeVoiceChannel && (
@@ -83,7 +112,7 @@ const HomePage: React.FC = () => {
           <h3>In Voice Channel</h3>
           <ul>
             {remoteStreams.map(({ user }) => (
-              <li key={user.uid} className={speaking === user.uid ? 'speaking' : ''}>
+              <li key={user.uid}>
                 {user.email}
               </li>
             ))}

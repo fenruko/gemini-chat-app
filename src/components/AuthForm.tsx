@@ -18,9 +18,33 @@ import {
   where,
 } from 'firebase/firestore';
 
-// ... (imports)
+const AuthForm: React.FC = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [isSignUp, setIsSignUp] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-// ... (component)
+  const handleSignUp = async (emailParam: string, passwordParam: string, usernameParam: string) => {
+    const userCredential: UserCredential = await createUserWithEmailAndPassword(auth, emailParam, passwordParam);
+    const user = userCredential.user;
+
+    const adminsCollection = collection(firestore, 'admins');
+    const adminSnapshot = await getDocs(adminsCollection);
+    if (adminSnapshot.empty) {
+      await setDoc(doc(firestore, 'admins', user.uid), { isAdmin: true });
+      console.log('First user signed up. Promoting to admin.');
+    }
+
+    // Create a user document in Firestore
+    await setDoc(doc(firestore, 'users', user.uid), {
+      username: usernameParam,
+      email: emailParam,
+      usernameLastChanged: null,
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,4 +159,3 @@ import {
 };
 
 export default AuthForm;
-
