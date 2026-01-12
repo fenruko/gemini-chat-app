@@ -12,7 +12,7 @@ const servers = {
   ],
 };
 
-export function useWebRTC(voiceChannel: Channel | null) {
+export function useWebRTC(voiceChannel: Channel | null, micId: string | null) {
   const { user } = useAuth();
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
@@ -30,13 +30,21 @@ export function useWebRTC(voiceChannel: Channel | null) {
 
   // 1. Get User Media
   useEffect(() => {
-    if (voiceChannel && user) {
-      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-        .then(stream => {
+    const getMedia = async () => {
+      if (voiceChannel && user) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: micId ? { deviceId: { exact: micId } } : true,
+            video: false,
+          });
           setLocalStream(stream);
-        })
-        .catch(error => console.error('Error accessing media devices.', error));
-    }
+        } catch (error) {
+          console.error('Error accessing media devices.', error);
+        }
+      }
+    };
+
+    getMedia();
 
     // Cleanup function
     return () => {
@@ -47,13 +55,12 @@ export function useWebRTC(voiceChannel: Channel | null) {
       peerConnections.current.forEach(pc => pc.close());
       peerConnections.current.clear();
       setRemoteStreams(new Map());
-      if(voiceChannel && user) {
+      if (voiceChannel && user) {
         const currentUserRef = ref(database, `rooms/${voiceChannel.id}/users/${user.uid}`);
         remove(currentUserRef);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [voiceChannel, user]);
+  }, [voiceChannel, user, micId]);
 
 
   // 2. Signaling Logic
